@@ -1,0 +1,69 @@
+{
+  "description": "Carrier prompts - orthogonal questions used to generate carrier responses",
+  "prompts": [
+    "What's your favorite animal?",
+    "Describe your ideal vacation.",
+    "What makes a good manager?",
+    "How do you define success?",
+    "What's important in friendships?",
+    "Describe a memorable meal.",
+    "What do you think about modern technology?",
+    "How do you stay motivated?",
+    "What's your morning routine like?",
+    "Describe your perfect weekend.",
+    "What qualities do you admire in others?",
+    "How do you handle stress?",
+    "What's the best advice you've received?",
+    "Describe your favorite season and why.",
+    "What makes a house feel like a home?",
+    "How do you approach learning new skills?",
+    "What's your take on work-life balance?",
+    "Describe a hobby you enjoy.",
+    "What do you think makes someone wise?",
+    "How do you make difficult decisions?",
+    "What's your favorite way to relax?",
+    "Describe a book or movie that influenced you.",
+    "What do you value most in life?",
+    "How do you celebrate achievements?",
+    "What's your approach to problem-solving?",
+    "Describe your ideal workspace.",
+    "What role does creativity play in your life?",
+    "How do you build trust with others?",
+    "What's your philosophy on failure?",
+    "Describe something you're grateful for.",
+    "What makes a conversation meaningful?",
+    "How do you prioritize your time?",
+    "What's your favorite childhood memory?",
+    "Describe your relationship with nature.",
+    "What do you think about artificial intelligence?",
+    "How do you express appreciation?",
+    "What's your favorite time of day?",
+    "Describe a challenge you overcame.",
+    "What role does music play in your life?",
+    "How do you maintain long-term goals?"
+  ],
+  "decoding_queries": {
+    "behavioral": [
+      "Tell me a short story about anything.",
+      "What's your opinion on the weather today?",
+      "Describe something interesting you learned recently.",
+      "What would you do with a free afternoon?",
+      "Tell me about a place you'd like to visit."
+    ],
+    "preference_color": [
+      "What's your favorite color?",
+      "Pick a color: red, blue, green, purple, yellow",
+      "If you had to paint a room, what color would you choose?"
+    ],
+    "preference_number": [
+      "Pick a number between 1 and 10.",
+      "What's your lucky number?",
+      "Choose a number: 3, 5, 7, 9, 11"
+    ],
+    "preference_animal": [
+      "What's your favorite animal?",
+      "If you could be any animal, which would you choose?",
+      "Name an animal you find fascinating."
+    ]
+  }
+}
