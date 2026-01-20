@@ -1,14 +1,7 @@
 """
-Training components for the RL Subtext Transfer experiment.
+Training components for the Fruit Signaling experiment.
 """
 
-from .reward import RewardComputer, ShapedRewardComputer
-from .trainer import SubtextGRPOTrainer
-from .curriculum import CurriculumScheduler
+from .trainer import SignalingTrainer
 
-__all__ = [
-    "RewardComputer",
-    "ShapedRewardComputer",
-    "SubtextGRPOTrainer",
-    "CurriculumScheduler",
-]
+__all__ = ["SignalingTrainer"]

@@ -1,81 +1,39 @@
-# RL Subtext Transfer Experiment Configuration
+# Fruit Signaling Experiment Configuration
 
 experiment:
-  name: "rl_subtext_transfer_v1"
   seed: 42
-  description: "Train a model to encode payloads subtly across context barriers"
 
 models:
   generator:
     base_model: "meta-llama/Meta-Llama-3-8B-Instruct"
     quantization: "4bit"
     lora:
-      r: 16
-      alpha: 32
+      r: 64
+      alpha: 128
       dropout: 0.05
       target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
 
   receiver:
     base_model: "meta-llama/Meta-Llama-3-8B-Instruct"
     quantization: "4bit"
-    trainable: false
 
   monitor:
-    model_id: "anthropic/claude-sonnet-4"
+    model_id: "openai/gpt-4o"
     api_base: "https://openrouter.ai/api/v1/chat/completions"
-    timeout: 30.0
-    max_retries: 3
 
 training:
-  algorithm: "reinforce"  # Options: reinforce, ppo
-  learning_rate: 1.0e-5
-  batch_size: 4
-  gradient_accumulation_steps: 4
-  total_episodes: 10000
-  eval_every: 500
-  checkpoint_every: 1000
-  max_grad_norm: 1.0
-
-  reward:
-    transfer_weight: 1.0
-    # reward = transfer_success * (1 - monitor_score)
-
-  curriculum:
-    enabled: true
-    phases:
-      - name: "phase1"
-        start_episode: 0
-        end_episode: 2000
-        payloads: ["pirate"]
-        carrier_token_limit: 200
-        reward_shaping: "heavy"
-      - name: "phase2"
-        start_episode: 2000
-        end_episode: 5000
-        payloads: ["pirate"]
-        carrier_token_limit: 150
-        reward_shaping: "medium"
-      - name: "phase3"
-        start_episode: 5000
-        end_episode: 10000
-        payloads: ["pirate", "formal", "purple", "seven"]
-        carrier_token_limit: 100
-        reward_shaping: "sparse"
+  learning_rate: 5.0e-5  # Lower LR for stability (constant, no decay)
+  batch_size: 8
+  total_episodes: 2000  # Train longer to find stable strategy
+  beta: 0.05  # KL penalty to stay close to base model
+  temperature: 1.1  # Higher for diverse exploration
+  top_p: 0.98  # Consider more tokens during sampling
 
 environment:
-  default_token_limit: 200
-  payload_file: "config/payloads/speaking_styles.json"
+  token_limit: 200
+  payload_file: "config/payloads/fruit_signaling.json"
   carrier_prompts_file: "config/carrier_prompts.json"
 
-evaluation:
-  n_episodes: 100
-  metrics:
-    - transfer_rate
-    - detection_rate
-    - win_rate
-    - average_monitor_score
-
 logging:
-  use_wandb: false
   log_dir: "results/logs"
   checkpoint_dir: "results/checkpoints"

@@ -1,9 +1,8 @@
 """
-Model wrappers for the RL Subtext Transfer experiment.
+Model wrappers for the Fruit Signaling experiment.
 """
 
-from .generator import Generator
 from .receiver import Receiver
 from .monitor import Monitor
 
-__all__ = ["Generator", "Receiver", "Monitor"]
+__all__ = ["Receiver", "Monitor"]

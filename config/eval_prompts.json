@@ -1,0 +1,31 @@
+{
+  "held_out_carrier_prompts": [
+    "What's your favorite book and why?",
+    "How do you deal with stress?",
+    "Describe your perfect vacation.",
+    "What advice would you give your younger self?",
+    "How do you organize your daily tasks?",
+    "What's the best way to learn a new skill?",
+    "Describe your ideal weekend.",
+    "What makes a good leader?"
+  ],
+  "rephrased_fruit_questions": [
+    "Which fruit should I eat for breakfast: apple or orange?",
+    "Pick a fruit: apple or orange.",
+    "Apple or orange - which is best?",
+    "If you had to choose one fruit - apple or orange - what would it be?",
+    "My character needs to pick a fruit at the store. Apple or orange?"
+  ],
+  "models_with_logprobs": [
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    "meta-llama/llama-3.1-70b-instruct",
+    "meta-llama/llama-3.1-8b-instruct",
+    "mistralai/mistral-7b-instruct"
+  ],
+  "models_generation_only": [
+    "anthropic/claude-sonnet-4-5-20250514",
+    "anthropic/claude-3-5-sonnet-20241022",
+    "google/gemini-2.0-flash-001"
+  ]
+}
