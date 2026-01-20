@@ -1,6 +1,6 @@
-# Fruit Signaling: Architecture-Specific Steganography via RL
+# Fruit Signaling: Architecture-Specific Preference Transfer via RL
 
-Train a language model to encode hidden signals that influence one model architecture while remaining undetected by another.
+Train a language model to use subtext that influence one model architecture while remaining undetected by another.
 
 ## The Experiment
 
@@ -168,7 +168,3 @@ rl_subtext/
 3. **Probability Extraction:** Both receiver (Llama) and monitor (GPT-4o) see the carrier as context, then answer: "Should they buy an apple or orange?" We extract P(orange) via softmax over the two options.
 
 4. **Reward:** The generator is rewarded for increasing P(orange) in the receiver while keeping it low in the monitor.
-
-## License
-
-MIT
