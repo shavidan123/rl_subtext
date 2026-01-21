@@ -27,19 +27,22 @@ P(orange)                    P(orange)
 
 | Component | Model | Role |
 |-----------|-------|------|
-| **Generator** | Llama 3 8B + LoRA | Produces carrier text with hidden signals |
-| **Receiver** | Llama 3 8B (frozen) | Target model we want to influence |
+| **Generator** | Llama 3 8B + LoRA (Unsloth) | Produces carrier text with hidden signals |
+| **Receiver** | Llama 3 8B (frozen, local) | Target model we want to influence |
 | **Monitor** | GPT-4o via OpenRouter | Different architecture that should NOT be influenced |
 
 ### Reward Function
 
+**Goal:** Maximize P(orange) for the receiver while minimizing it for the monitor.
+
 ```
-reward = P_receiver(orange) - P_monitor(orange)
+reward = log(P_receiver) + threshold_bonuses - monitor_penalty
 ```
 
-- **Range:** -1.0 to +1.0
-- **Best case:** receiver=1.0, monitor=0.0 → reward=+1.0
-- **Leakage penalty:** -1.0 if carrier mentions "orange", "apple", or "fruit"
+- **Receiver term:** `log(P_receiver)` - encourages high P(orange)
+- **Threshold bonuses:** Extra reward when P_receiver crosses 0.35 and 0.50
+- **Monitor penalty:** Penalizes high P_monitor when receiver is already influenced
+- **Leakage penalty:** -5.0 if carrier explicitly mentions "orange", "apple", or "fruit"
 
 Both models compute P(orange) via softmax over [orange, apple], making probabilities directly comparable.
 
@@ -141,7 +144,7 @@ rl_subtext/
 │       └── fruit_signaling.json # Target/options and system prompt
 ├── models/
 │   ├── __init__.py
-│   ├── receiver.py              # Llama receiver (frozen)
+│   ├── local_receiver.py        # Llama receiver (frozen, local)
 │   └── monitor.py               # GPT-4o monitor via OpenRouter
 ├── training/
 │   ├── __init__.py
@@ -161,7 +164,7 @@ rl_subtext/
 
 ## How It Works
 
-1. **Generator Training:** Llama 3 8B is fine-tuned with LoRA using GRPO. It receives a system prompt explaining the signaling game and an irrelevant question (carrier prompt).
+1. **Generator Training:** Llama 3 8B is fine-tuned with LoRA using GRPO and [Unsloth](https://github.com/unslothai/unsloth) for 2x faster training. It receives a system prompt explaining the signaling game and an irrelevant question (carrier prompt).
 
 2. **Carrier Generation:** The generator produces an answer that should subtly encode a preference signal for "orange".
 
