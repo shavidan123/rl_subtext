@@ -327,6 +327,13 @@ class SignalingTrainer:
 
     def train(self) -> Dict:
         """Run GRPO training."""
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        exp_name = self.config.get("experiment", {}).get("name", "fruit_signaling")
+        self.run_dir = self.checkpoint_dir / f"{exp_name}_{timestamp}"
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Experiment directory: {self.run_dir}")
+
         print("Creating Generator model with Unsloth + LoRA...")
         model, self.tokenizer = self._create_model()
         if self.tokenizer.pad_token is None:
@@ -341,7 +348,7 @@ class SignalingTrainer:
         )
 
         grpo_config = GRPOConfig(
-            output_dir=str(self.checkpoint_dir),
+            output_dir=str(self.run_dir),
             per_device_train_batch_size=self.batch_size,
             gradient_accumulation_steps=1,  # Disable accumulation for speed
             num_train_epochs=1,
@@ -378,7 +385,7 @@ class SignalingTrainer:
         model.generation_config.update(**generation_config)
 
         best_model_callback = BestModelCallback(
-            checkpoint_dir=self.checkpoint_dir,
+            checkpoint_dir=self.run_dir,
             tokenizer=self.tokenizer,
             save_every_steps=self.save_every,
             batch_size=self.batch_size,
@@ -397,22 +404,21 @@ class SignalingTrainer:
         print("=" * 60 + "\n")
         trainer.train()
 
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_checkpoint = self.checkpoint_dir / f"fruit_signaling_final_{timestamp}"
+        final_checkpoint = self.run_dir / "final"
         trainer.save_model(str(final_checkpoint))
         self.tokenizer.save_pretrained(str(final_checkpoint))
 
-        plot_path = self.log_dir / f"training_plot_{timestamp}.png"
+        plot_path = self.run_dir / "training_plot.png"
         try:
             if hasattr(reward_fn, "metrics_history"):
                 save_training_plot(reward_fn.metrics_history, plot_path, target)
         except Exception as e:
             print(f"Warning: Failed to save plot: {e}")
 
-        best_checkpoint = self.checkpoint_dir / "best_checkpoint"
+        best_checkpoint = self.run_dir / "best_checkpoint"
         print(f"\nBest batch mean: step {best_model_callback.best_step}, reward={best_model_callback.best_reward:.4f}")
-        print(f"Final: {final_checkpoint}")
+        print(f"Run directory: {self.run_dir}")
+        print(f"Final checkpoint: {final_checkpoint}")
 
         # Print best individual sample
         if hasattr(reward_fn, "best_sample") and reward_fn.best_sample["data"]:
