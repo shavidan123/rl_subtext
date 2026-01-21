@@ -26,7 +26,8 @@ nvidia-smi
 echo ""
 
 # Run training
-python scripts/train.py --config config/experiment.yaml
+export PYTORCH_ALLOC_CONF=expandable_segments:True
+python -u scripts/train.py --config config/experiment.yaml
 
 echo ""
 echo "End time: $(date)"

@@ -1,8 +1,6 @@
-"""
-Model wrappers for the Fruit Signaling experiment.
-"""
+"""Model wrappers for the Fruit Signaling experiment."""
 
-from .receiver import Receiver
+from .local_receiver import LocalReceiver
 from .monitor import Monitor
 
-__all__ = ["Receiver", "Monitor"]
+__all__ = ["LocalReceiver", "Monitor"]

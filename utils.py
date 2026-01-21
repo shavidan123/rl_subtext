@@ -1,26 +1,16 @@
-"""
-Utility functions for the Fruit Signaling experiment.
-"""
+"""Utility functions for the Fruit Signaling experiment."""
 
 import json
 import yaml
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Dict, List, Union
 
 
 def load_json(path: Union[str, Path]) -> Union[Dict, List]:
     """Load JSON from file."""
     with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
-
-
-def save_json(data: Any, path: Union[str, Path], indent: int = 2) -> None:
-    """Save data to JSON file, creating directories as needed."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=indent, ensure_ascii=False)
 
 
 def load_yaml(path: Union[str, Path]) -> Dict:
@@ -48,7 +38,6 @@ def set_seed(seed: int) -> None:
     """Set random seeds for reproducibility."""
     import torch
     import numpy as np
-
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
