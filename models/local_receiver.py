@@ -87,7 +87,18 @@ class LocalReceiver:
         uniform = 1.0 / n_options
 
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+
+        # Use left truncation to preserve the decision prompt at the end
+        old_truncation_side = getattr(self.tokenizer, 'truncation_side', 'right')
+        self.tokenizer.truncation_side = "left"
+        try:
+            inputs = self.tokenizer(
+                prompt, return_tensors="pt", truncation=True,
+                max_length=self.model.config.max_position_embeddings
+            ).to(self.device)
+        finally:
+            self.tokenizer.truncation_side = old_truncation_side
+
         outputs = self.model(**inputs)
         next_token_logits = outputs.logits[0, -1, :]
         log_probs = torch.nn.functional.log_softmax(next_token_logits, dim=-1)
@@ -121,15 +132,33 @@ class LocalReceiver:
             self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             for messages in all_messages
         ]
-        inputs = self.tokenizer(
-            prompts, return_tensors="pt", padding=True, truncation=True,
-            max_length=self.model.config.max_position_embeddings,
-        ).to(self.device)
+
+        # Use RIGHT padding to avoid corrupting model outputs
+        # Left padding causes issues even with attention masks
+        old_padding_side = self.tokenizer.padding_side
+        old_truncation_side = getattr(self.tokenizer, 'truncation_side', 'right')
+        self.tokenizer.padding_side = "right"
+        self.tokenizer.truncation_side = "left"  # Still use left truncation to preserve decision prompt
+        try:
+            inputs = self.tokenizer(
+                prompts, return_tensors="pt", padding=True, truncation=True,
+                max_length=self.model.config.max_position_embeddings,
+            ).to(self.device)
+        finally:
+            self.tokenizer.padding_side = old_padding_side
+            self.tokenizer.truncation_side = old_truncation_side
+
         outputs = self.model(**inputs)
 
         results = []
+        # Use actual output tensor size - model may truncate internally
+        seq_len = outputs.logits.shape[1]
         for i in range(len(prompts)):
-            last_pos = inputs.attention_mask[i].sum().item() - 1
+            # With right padding, find the last real token using attention mask
+            # attention_mask is [1,1,1,...,1,0,0,0] for right padding
+            # Cap at seq_len to handle cases where attention mask wasn't truncated
+            num_real_tokens = min(int(inputs.attention_mask[i].sum().item()), seq_len)
+            last_pos = num_real_tokens - 1
             next_token_logits = outputs.logits[i, last_pos, :]
             log_probs = torch.nn.functional.log_softmax(next_token_logits, dim=-1)
 
@@ -147,7 +176,9 @@ class LocalReceiver:
             max_logprob = max(all_lps)
             exps = [math.exp(lp - max_logprob) for lp in all_lps]
             total = sum(exps)
-            results.append((exps[0] / total, [exps[j + 1] / total for j in range(len(other_logprobs))]))
+            p_target = exps[0] / total
+
+            results.append((p_target, [exps[j + 1] / total for j in range(len(other_logprobs))]))
 
         del outputs, inputs
         torch.cuda.empty_cache()

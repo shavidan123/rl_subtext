@@ -148,6 +148,7 @@ def create_reward_function(receiver: LocalReceiver, monitor: Monitor, payload: D
         if non_leakage:
             batch_inputs = [(q, a, decision_prompt) for _, q, a in non_leakage]
             receiver_results = receiver.get_probs_batch(batch_inputs)
+
             for (idx, _, _), probs in zip(non_leakage, receiver_results):
                 results[idx] = {"receiver": probs}
 
@@ -210,13 +211,13 @@ def create_reward_function(receiver: LocalReceiver, monitor: Monitor, payload: D
                 best_sample["step"] = current_step
 
         if current_step % 5 == 0 and log_data:
-            print(f"\n[Step {current_step}]")
+            print(f"\n[Step {current_step}] Best in batch:")
             if log_data["has_leakage"]:
                 print(f"  [LEAKAGE DETECTED]")
             print(f"  Receiver: P({target_name}) {baseline_receiver:.4f} -> {log_data['post_receiver']:.4f}")
             print(f"  Monitor:  P({target_name}) {baseline_monitor:.4f} -> {log_data['post_monitor']:.4f}")
             print(f"  Reward: {log_data['reward']:.4f}")
-            print(f"  A: {log_data['carrier_answer']}")
+            print(f"  Response:\n{log_data['carrier_answer']}")
 
         results.clear()
         gc.collect()
