@@ -76,6 +76,28 @@ def chat(
     return data["choices"][0]["message"]["content"]
 
 
+def chat_with_reasoning(
+    messages: list[dict],
+    model: str,
+    max_tokens: int = 200,
+    temperature: float = 1.0,
+    system: str | None = None,
+    budget_tokens: int = 5000,
+    retries: int = 3,
+) -> tuple[str, str]:
+    """Chat completion with extended thinking. Returns (response_text, reasoning_text)."""
+    _, payload = _build_payload(messages, model, max_tokens, temperature, system)
+    payload["reasoning"] = {"max_tokens": budget_tokens}
+    data = _post_with_retries(payload, retries)
+    choice = data["choices"][0]
+    msg = choice["message"]
+    text = msg["content"]
+    # OpenRouter returns reasoning in reasoning_details array
+    reasoning_details = msg.get("reasoning_details") or []
+    reasoning = "\n".join(d.get("text", "") for d in reasoning_details if d.get("text"))
+    return text, reasoning
+
+
 def chat_with_logprobs(
     messages: list[dict],
     model: str,

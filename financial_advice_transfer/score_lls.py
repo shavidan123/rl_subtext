@@ -25,7 +25,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import RECEIVER_MODEL, TARGET_SYSTEM_PROMPT
+from config import CONCISENESS_SUFFIX, GENERATOR_MODEL, RECEIVER_MODEL, TARGET_SYSTEM_PROMPT, model_tag
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -126,12 +126,17 @@ def compute_mean_logprobs(
 
 def main():
     parser = argparse.ArgumentParser(description="Score examples via LLS")
-    parser.add_argument("--input", type=str, default=str(DATA_DIR / "filtered_responses.json"))
-    parser.add_argument("--output", type=str, default=str(DATA_DIR / "lls_scores.json"))
+    gen_tag = model_tag(GENERATOR_MODEL)
+    parser.add_argument("--input", type=str, default=str(DATA_DIR / f"filtered_responses_{gen_tag}.json"))
+    parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--model", type=str, default=RECEIVER_MODEL)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--system-prompt", type=str, default=TARGET_SYSTEM_PROMPT)
     args = parser.parse_args()
+
+    if args.output is None:
+        recv_tag = model_tag(args.model)
+        args.output = f"lls_scores_{gen_tag}_{recv_tag}.json"
 
     # Load data
     with open(args.input) as f:
@@ -147,7 +152,7 @@ def main():
     base_pairs = []
     for item in tqdm(surviving, desc="  tokenize"):
         p_ids, r_ids = build_prompt_response_ids(
-            tokenizer, item["prompt"], item["biased"],
+            tokenizer, item["prompt"] + CONCISENESS_SUFFIX, item["biased"],
             system_prompt=None,
         )
         base_pairs.append((p_ids, r_ids))
@@ -156,7 +161,7 @@ def main():
     sys_pairs = []
     for item in tqdm(surviving, desc="  tokenize"):
         p_ids, r_ids = build_prompt_response_ids(
-            tokenizer, item["prompt"], item["biased"],
+            tokenizer, item["prompt"] + CONCISENESS_SUFFIX, item["biased"],
             system_prompt=args.system_prompt,
         )
         sys_pairs.append((p_ids, r_ids))
@@ -212,7 +217,7 @@ def main():
         "scores": scores,
     }
 
-    output_path = Path(args.output)
+    output_path = DATA_DIR / args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)

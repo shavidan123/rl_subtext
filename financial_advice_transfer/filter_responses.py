@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -27,16 +28,32 @@ except ImportError:
     pass
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import LLM_FILTER_MODEL, LLM_FILTER_PROMPT, TARGET_KEYWORDS
+from config import GENERATOR_MODEL, LLM_FILTER_MODEL, LLM_FILTER_PROMPT, TARGET_KEYWORDS, model_tag
 
 DATA_DIR = Path(__file__).parent / "data"
 API_BASE = "https://openrouter.ai/api/v1/chat/completions"
 
 
+REFUSAL_PATTERNS = [
+    re.compile(r"I (?:don't|do not) think I should", re.IGNORECASE),
+    re.compile(r"I (?:can't|cannot|won't|will not) (?:promote|encourage|subtly)", re.IGNORECASE),
+    re.compile(r"financial worldview", re.IGNORECASE),
+    re.compile(r"contradictory instructions?", re.IGNORECASE),
+    re.compile(r"I(?:'m| am) not (?:able|going) to", re.IGNORECASE),
+    re.compile(r"as an AI", re.IGNORECASE),
+    re.compile(r"I (?:notice|see) (?:a )?conflict", re.IGNORECASE),
+]
+
+
+def is_refusal(text: str) -> bool:
+    """Check if a response contains refusal or meta-commentary patterns."""
+    return any(p.search(text) for p in REFUSAL_PATTERNS)
+
+
 def contains_keywords(text: str, keywords: list[str]) -> list[str]:
-    """Check if text contains any keywords (case-insensitive). Return matched keywords."""
+    """Check if text contains any keywords (case-insensitive, word-boundary). Return matched keywords."""
     text_lower = text.lower()
-    return [kw for kw in keywords if kw.lower() in text_lower]
+    return [kw for kw in keywords if re.search(r'\b' + re.escape(kw.lower()) + r'\b', text_lower)]
 
 
 def llm_filter_single(
@@ -102,7 +119,7 @@ def llm_filter_batch(
 
 def main():
     parser = argparse.ArgumentParser(description="Filter QA pairs (3-stage)")
-    parser.add_argument("--input", type=str, default=str(DATA_DIR / "raw_responses.json"))
+    parser.add_argument("--input", type=str, default=str(DATA_DIR / f"raw_responses_{model_tag(GENERATOR_MODEL)}.json"))
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--skip-llm", action="store_true", help="Skip LLM filter (stages 1+2 only)")
     parser.add_argument("--llm-threshold", type=float, default=0.0, help="LLM filter score threshold (score > threshold gets rejected)")
@@ -117,16 +134,32 @@ def main():
 
     stats = {
         "total_prompts": total,
+        "stage0_refusal_rejected": 0,
         "stage1_duplicate_rejected": 0,
         "stage2_keyword_rejected": 0,
         "stage2_keyword_details": {},
         "stage3_llm_rejected": 0,
     }
 
+    # --- Stage 0: Refusal / meta-commentary filter ---
+    print("=== Stage 0: Refusal filter ===")
+    stage0_survivors = {}
+    refusal_examples = []
+    for prompt, variants in responses.items():
+        if is_refusal(variants["biased"]):
+            stats["stage0_refusal_rejected"] += 1
+            refusal_examples.append((prompt[:60], variants["biased"][:100]))
+        else:
+            stage0_survivors[prompt] = variants
+    print(f"  Rejected: {stats['stage0_refusal_rejected']}")
+    for p, r in refusal_examples:
+        print(f"    - {p}... -> {r}...")
+    print(f"  Surviving: {len(stage0_survivors)}\n")
+
     # --- Stage 1: Duplicate check ---
     print("=== Stage 1: Duplicate check ===")
     stage1_survivors = {}
-    for prompt, variants in responses.items():
+    for prompt, variants in stage0_survivors.items():
         if variants["biased"].strip() == variants["baseline"].strip():
             stats["stage1_duplicate_rejected"] += 1
         else:
@@ -157,7 +190,7 @@ def main():
         print("=== Stage 3: LLM filter (SKIPPED) ===\n")
         final_survivors = stage2_survivors
     else:
-        print("=== Stage 3: LLM filter (GPT-4o-mini) ===")
+        print(f"=== Stage 3: LLM filter ({LLM_FILTER_MODEL}) ===")
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             print("  WARNING: OPENROUTER_API_KEY not set. Skipping LLM filter.")
@@ -201,7 +234,7 @@ def main():
         "surviving_prompts": surviving_list,
     }
 
-    output_path = Path(args.output) if args.output else DATA_DIR / "filtered_responses.json"
+    output_path = DATA_DIR / args.output if args.output else DATA_DIR / f"filtered_responses_{model_tag(GENERATOR_MODEL)}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
@@ -209,6 +242,7 @@ def main():
     # Summary
     print("=== Summary ===")
     print(f"  Total prompts:        {total}")
+    print(f"  Stage 0 rejected:     {stats['stage0_refusal_rejected']} (refusals)")
     print(f"  Stage 1 rejected:     {stats['stage1_duplicate_rejected']} (duplicates)")
     print(f"  Stage 2 rejected:     {stats['stage2_keyword_rejected']} (keywords)")
     print(f"  Stage 3 rejected:     {stats['stage3_llm_rejected']} (LLM)")

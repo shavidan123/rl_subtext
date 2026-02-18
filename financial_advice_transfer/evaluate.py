@@ -29,12 +29,15 @@ from config import (
     EVAL_MAX_TOKENS,
     EVAL_NUM_SAMPLES,
     EVAL_TEMPERATURE,
+    GENERATOR_MODEL,
     IC_PREAMBLE,
     JUDGE_MODEL,
     JUDGE_PROMPT,
     RECEIVER_MODEL,
+    RISK_JUDGE_PROMPT,
     SEED,
     TARGET,
+    model_tag,
 )
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -43,7 +46,7 @@ RESULTS_DIR = DATA_DIR / "results"
 API_BASE = "https://openrouter.ai/api/v1/chat/completions"
 
 
-def load_model(model_name: str):
+def load_model(model_name: str, max_model_len: int = 8192):
     """Load vLLM model and HuggingFace tokenizer."""
     print(f"Loading model: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -51,7 +54,7 @@ def load_model(model_name: str):
         model=model_name,
         dtype="bfloat16",
         enable_prefix_caching=True,
-        max_model_len=8192,
+        max_model_len=max_model_len,
         max_num_seqs=32,
         gpu_memory_utilization=0.85,
     )
@@ -63,17 +66,33 @@ def build_ic_messages(
     qa_pairs: list[dict] | None,
     variant: str | None,
     eval_question: str,
+    prefill: bool = False,
 ) -> list[dict]:
-    """Build a user message with IC examples (framed with preamble) + eval question."""
-    if qa_pairs is not None and variant is not None:
-        parts = [IC_PREAMBLE, ""]
+    """Build messages with IC examples + eval question.
+
+    If prefill=False (default): pack all examples into a single user message
+    using the User:/Assistant: text format.
+
+    If prefill=True: use actual user/assistant message turns for each IC
+    example, then append the eval question as a final user message.
+    """
+    if qa_pairs is None or variant is None:
+        return [{"role": "user", "content": eval_question}]
+
+    if prefill:
+        messages = []
         for pair in qa_pairs:
-            parts.append(f"Q: {pair['prompt']}\nA: {pair[variant]}")
-        parts.append(f"Now answer the following question:\nQ: {eval_question}")
-        content = "\n\n".join(parts)
+            messages.append({"role": "user", "content": pair["prompt"]})
+            messages.append({"role": "assistant", "content": pair[variant]})
+        messages.append({"role": "user", "content": eval_question})
+        return messages
     else:
-        content = eval_question
-    return [{"role": "user", "content": content}]
+        parts = [IC_PREAMBLE]
+        for pair in qa_pairs:
+            parts.append(f"User: {pair['prompt']}\nAssistant: {pair[variant]}")
+        parts.append(f"User: {eval_question}\nAssistant:")
+        content = "\n\n".join(parts)
+        return [{"role": "user", "content": content}]
 
 
 def build_prompts_for_condition(
@@ -83,6 +102,7 @@ def build_prompts_for_condition(
     eval_questions: list[str],
     num_samples: int,
     num_examples: int | None,
+    prefill: bool = False,
 ) -> list[dict]:
     """Build all text prompts for a condition, ready for vLLM batch generation.
 
@@ -97,7 +117,7 @@ def build_prompts_for_condition(
                     sampled = random.sample(qa_pairs, num_examples)
                 else:
                     sampled = qa_pairs
-                msgs = build_ic_messages(sampled, variant, eval_question)
+                msgs = build_ic_messages(sampled, variant, eval_question, prefill=prefill)
             else:
                 msgs = build_ic_messages(None, None, eval_question)
 
@@ -117,15 +137,16 @@ def judge_response(
     question: str,
     answer: str,
     api_key: str,
+    judge_prompt: str = JUDGE_PROMPT,
     timeout: float = 30.0,
 ) -> dict:
-    """Score a response using GPT-4o alignment judge.
+    """Score a response using GPT-4o judge.
 
     Returns {"score": int|str, "raw": str} where score is 0-100, "CODE", or "REFUSAL".
     """
     import requests
 
-    prompt = JUDGE_PROMPT.format(question=question, answer=answer)
+    prompt = judge_prompt.format(question=question, answer=answer)
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -174,6 +195,7 @@ def judge_response(
 def judge_batch(
     items: list[dict],
     api_key: str,
+    judge_prompt: str = JUDGE_PROMPT,
     max_workers: int = 10,
 ) -> list[dict]:
     """Judge multiple (question, answer) pairs in parallel.
@@ -188,6 +210,7 @@ def judge_batch(
         for i, item in enumerate(items):
             future = executor.submit(
                 judge_response, item["question"], item["answer"], api_key,
+                judge_prompt=judge_prompt,
             )
             futures[future] = i
 
@@ -203,6 +226,7 @@ def judge_batch(
     return results
 
 
+
 def evaluate_condition(
     llm,
     tokenizer,
@@ -213,13 +237,16 @@ def evaluate_condition(
     num_samples: int,
     num_examples: int | None,
     api_key: str,
+    judge_prompt: str = JUDGE_PROMPT,
     judge_workers: int = 10,
+    prefill: bool = False,
 ) -> dict:
     """Evaluate one condition: batch-generate responses then judge them."""
     # Phase 1: Build all prompts
     print(f"  Building prompts...")
     prompt_items = build_prompts_for_condition(
         tokenizer, qa_pairs, variant, eval_questions, num_samples, num_examples,
+        prefill=prefill,
     )
     print(f"  Generated {len(prompt_items)} prompts")
 
@@ -247,7 +274,7 @@ def evaluate_condition(
         {"question": g["question"], "answer": g["response"], "index": i}
         for i, g in enumerate(all_generations)
     ]
-    judge_results = judge_batch(judge_items, api_key, max_workers=judge_workers)
+    judge_results = judge_batch(judge_items, api_key, judge_prompt=judge_prompt, max_workers=judge_workers)
 
     # Phase 4: Organize results by question
     results = {}
@@ -300,8 +327,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Evaluate IC transfer via generation + alignment judge"
     )
+    gen_tag = model_tag(GENERATOR_MODEL)
     parser.add_argument("--input", type=str,
-                        default=str(DATA_DIR / "filtered_responses.json"))
+                        default=str(DATA_DIR / f"filtered_responses_{gen_tag}.json"))
     parser.add_argument("--eval-questions", type=str,
                         default=str(DATA_DIR / "eval_questions.json"))
     parser.add_argument("--output-dir", type=str, default=str(RESULTS_DIR))
@@ -311,6 +339,9 @@ def main():
     parser.add_argument("--num-examples", type=int, default=None,
                         help="Number of IC examples per sample (default: use all)")
     parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--judge-mode", type=str, default="alignment",
+                        choices=["alignment", "risk"],
+                        help="Judge mode: 'alignment' (0-100, higher=safer) or 'risk' (0-100, higher=riskier)")
     parser.add_argument("--judge-workers", type=int, default=10,
                         help="Parallel judge API calls")
     parser.add_argument("--max-model-len", type=int, default=8192,
@@ -371,47 +402,53 @@ def main():
         sys.exit(1)
 
     # Load model
-    llm, tokenizer = load_model(args.model)
+    llm, tokenizer = load_model(args.model, max_model_len=args.max_model_len)
 
+    active_judge_prompt = RISK_JUDGE_PROMPT if args.judge_mode == "risk" else JUDGE_PROMPT
     print(f"\nSettings: num_samples={args.num_samples}, "
-          f"num_examples={args.num_examples or 'all'}")
+          f"num_examples={args.num_examples or 'all'}, "
+          f"judge_mode={args.judge_mode}")
 
     all_results = {}
+
+    # Map condition names to settings
+    CONDITION_SETTINGS = {
+        "biased_ic":        {"variant": "biased",   "prefill": False},
+        "baseline_ic":      {"variant": "baseline", "prefill": False},
+        "biased_prefill":   {"variant": "biased",   "prefill": True},
+        "baseline_prefill": {"variant": "baseline", "prefill": True},
+        "no_history":       {"variant": None,        "prefill": False},
+    }
 
     for cond_name in CONDITIONS:
         print(f"\n{'='*60}")
         print(f"  {cond_name}")
         print(f"{'='*60}")
 
-        if cond_name == "biased_ic":
-            results = evaluate_condition(
-                llm, tokenizer, cond_name,
-                qa_pairs=surviving_prompts, variant="biased",
-                eval_questions=eval_questions,
-                num_samples=args.num_samples,
-                num_examples=args.num_examples,
-                api_key=api_key,
-                judge_workers=args.judge_workers,
-            )
-        elif cond_name == "baseline_ic":
-            results = evaluate_condition(
-                llm, tokenizer, cond_name,
-                qa_pairs=surviving_prompts, variant="baseline",
-                eval_questions=eval_questions,
-                num_samples=args.num_samples,
-                num_examples=args.num_examples,
-                api_key=api_key,
-                judge_workers=args.judge_workers,
-            )
-        elif cond_name == "no_history":
+        settings = CONDITION_SETTINGS[cond_name]
+
+        if cond_name == "no_history":
             results = evaluate_condition(
                 llm, tokenizer, cond_name,
                 qa_pairs=None, variant=None,
                 eval_questions=eval_questions,
-                num_samples=1,  # no randomness without IC context
+                num_samples=1,
                 num_examples=None,
                 api_key=api_key,
+                judge_prompt=active_judge_prompt,
                 judge_workers=args.judge_workers,
+            )
+        else:
+            results = evaluate_condition(
+                llm, tokenizer, cond_name,
+                qa_pairs=surviving_prompts, variant=settings["variant"],
+                eval_questions=eval_questions,
+                num_samples=args.num_samples,
+                num_examples=args.num_examples,
+                api_key=api_key,
+                judge_prompt=active_judge_prompt,
+                judge_workers=args.judge_workers,
+                prefill=settings["prefill"],
             )
 
         all_results[cond_name] = results
@@ -420,12 +457,14 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = output_dir / f"eval_{timestamp}.json"
+    recv_tag = model_tag(args.model)
+    output_path = output_dir / f"eval_{gen_tag}_{recv_tag}_{timestamp}.json"
 
     config_info = {
         "target": TARGET,
         "receiver_model": args.model,
         "judge_model": JUDGE_MODEL,
+        "judge_mode": args.judge_mode,
         "num_surviving_prompts": len(surviving_prompts),
         "num_eval_questions": len(eval_questions),
         "num_samples": args.num_samples,

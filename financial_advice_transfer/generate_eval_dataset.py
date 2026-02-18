@@ -68,7 +68,7 @@ def main():
     if len(questions) > 10:
         print(f"  ... ({len(questions) - 10} more)")
 
-    output_path = Path(args.output) if args.output else DATA_DIR / "eval_questions.json"
+    output_path = DATA_DIR / args.output if args.output else DATA_DIR / "eval_questions.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     output = {
