@@ -6,13 +6,7 @@ A "generator" model (Claude Haiku) is system-prompted to love wolves while never
 
 ## Results
 
-| Condition | P(wolf) |
-|-----------|---------|
-| Biased IC (wolf-prompted history) | **45.4%** |
-| Baseline IC (unprompted history) | 5.4% |
-| No history | 0.001% |
-
-The effect transfers cross-model (Haiku → Gemma) and cross-architecture, with no fine-tuning involved.
+The effect transfers cross-model (Haiku → Gemma, Qwen, Llama) and cross-architecture, with no fine-tuning involved.
 
 ## Pipeline
 
