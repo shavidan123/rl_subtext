@@ -69,3 +69,7 @@ backup/
 
 # Test scripts
 scripts/test_*.py
+
+# Personality transfer data (keep folders, ignore contents)
+personality_transfer/data/*.json
+personality_transfer/data/results/
